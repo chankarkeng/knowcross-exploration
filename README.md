@@ -132,6 +132,18 @@ data/, logs/          generated at runtime; both gitignored
 this repo, and it reads the build/start commands and health check. Then set the five env
 vars — all are marked `sync: false`, so Render prompts for them and they never live in git.
 
+If you instead create a plain **Web Service**, `render.yaml` is ignored and Render's default
+build (`npm install`) never compiles anything — you get `Cannot find module dist/index.js`
+at startup. Set the build command by hand:
+
+```
+npm ci --include=dev && npm run build
+```
+
+`--include=dev` matters: Render sets `NODE_ENV=production`, which tells npm to skip
+devDependencies — and `typescript` is one, so a plain `npm ci` leaves you with no `tsc` and
+a build that "succeeds" without emitting `dist/`.
+
 Two things about the free tier that will look like bugs and aren't:
 
 - **It sleeps after ~15 minutes idle**, and the next request takes ~50s to wake it. Fine for
