@@ -16,4 +16,6 @@ export const config = {
   PROPERTY_ID: required("PROPERTY_ID"),
   PUBLIC_KEY: required("PUBLIC_KEY"),
   PRIVATE_KEY: required("PRIVATE_KEY"),
+  // Optional: unset means no gate (local dev). Set it anywhere reachable by others.
+  ACCESS_TOKEN: (process.env.ACCESS_TOKEN ?? "").trim(),
 };

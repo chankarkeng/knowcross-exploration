@@ -3,9 +3,10 @@ import { join } from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
 import swaggerUi from "swagger-ui-express";
 
+import { requireToken } from "./auth";
 import { config } from "./config";
 import { readMasterConfig } from "./configStore";
-import { flushCall, logEvent } from "./logger";
+import { flushCall, logEvent, redactToken } from "./logger";
 import { automationRouter } from "./routes/automation";
 import { complainRouter } from "./routes/complain";
 import { glitchRouter } from "./routes/glitch";
@@ -14,7 +15,11 @@ import { masterRouter } from "./routes/master";
 import { openapiDocument } from "./swagger/openapi";
 
 const app = express();
+app.set("trust proxy", 1); // Render terminates TLS; makes req.secure honest
 app.use(express.json({ limit: "15mb" }));
+
+// Gate first: rejected requests never reach the logger or the upstream client.
+app.use(requireToken);
 
 app.use((req: Request, res: Response, next: NextFunction) => {
   const correlationId = randomUUID();
@@ -28,7 +33,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     correlationId,
     direction: "inbound-request",
     method: req.method,
-    path: req.originalUrl,
+    path: redactToken(req.originalUrl),
     body: req.body,
   });
 
@@ -100,7 +105,7 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
     correlationId: res.locals.correlationId,
     direction: "upstream-error",
     error: err.message,
-    path: req.originalUrl,
+    path: redactToken(req.originalUrl),
   });
   res.status(502).json({ error: "Upstream call failed", message: err.message });
 });

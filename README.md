@@ -18,8 +18,9 @@ npm run dev              # http://localhost:3000
 | `PROPERTY_ID` | Default property, used when `GET /api/master` gets no `PropertyId` |
 | `PUBLIC_KEY` | Client ID; sent as `X-Knowcross-ClientID` and signed into the access header |
 | `PRIVATE_KEY` | HMAC-SHA256 secret. Never commit it — `.env` is gitignored |
+| `ACCESS_TOKEN` | Optional. Unset = no gate (fine locally). **Required for any hosted deploy** — see [Access token](#access-token) |
 
-All four are required; the process throws on startup if any is missing or blank. `PORT` is optional and defaults to 3000.
+The first four are required; the process throws on startup if any is missing or blank. `PORT` is optional and defaults to 3000.
 
 Scripts: `npm run dev` (ts-node-dev, reloads on change) · `npm run build` (tsc to `dist/`) · `npm start` (run the build).
 
@@ -56,6 +57,30 @@ Two notes worth knowing before you use them:
 
 - **`GET /api/master` has a side effect.** On a 2xx it caches the response to `data/config.json`, which is what `/config.json` serves and what the `/config` and `/service-requests` pages read. Call it once before using those pages.
 - **`POST /api/complain/register` takes an array**, not a single object, and returns one result per element. The `/service-requests` page uses this to queue several requests and submit them in one call.
+
+## Access token
+
+When `ACCESS_TOKEN` is set, every route except `/health` needs it. Share one link:
+
+```
+https://<your-app>.onrender.com/config?token=<TOKEN>
+```
+
+The token is accepted as `?token=`, an `X-Access-Token` header (handy for curl), or the
+`access` cookie. On a page load the server sets that cookie and redirects to the same URL
+without the token, so it doesn't sit in the address bar — and from then on the pages' own
+`fetch()` calls and Swagger UI work without it. The token is redacted from stdout and from
+`logs/` before anything is written.
+
+Generate one with `openssl rand -hex 24`. To revoke, change the env var — every cookie
+stops working immediately.
+
+**Know what this is.** A single shared bearer token in a URL is a speed bump, not real
+auth: it's in whoever's history you sent it to, there are no per-user identities, and no
+revocation short of rotating it for everyone. It's proportionate for keeping a dev tool off
+the open internet, and it is *not* proportionate to the fact that this app can write real
+records into a real property with your production credentials. Point it at a test property
+if you have one.
 
 ## Authorization
 
@@ -101,10 +126,29 @@ docs/                 the Unifocus operations PDF and working notes
 data/, logs/          generated at runtime; both gitignored
 ```
 
+## Deploying to Render (free)
+
+`render.yaml` is checked in, so: **New → Blueprint** in the Render dashboard, point it at
+this repo, and it reads the build/start commands and health check. Then set the five env
+vars — all are marked `sync: false`, so Render prompts for them and they never live in git.
+
+Two things about the free tier that will look like bugs and aren't:
+
+- **It sleeps after ~15 minutes idle**, and the next request takes ~50s to wake it. Fine for
+  a teammate poking at it; don't read it as the app hanging.
+- **The disk is ephemeral.** `logs/` and `data/config.json` are wiped on every redeploy and
+  every wake. So after a cold start the `/config` and `/service-requests` pages will say the
+  master config isn't loaded — hit **Fetch master config** (or `GET /api/master`) and it
+  repopulates. It also means the hosted instance is no good for reviewing call logs, which
+  is half the point of this tool: run it locally for that.
+
 ## Security
 
 The design brief was "minimal implementation just for API testing", and it is exactly that:
 
-- **No authentication on this wrapper.** Anyone who can reach it can call the upstream API with your credentials — and `/api/complain/register` writes real records into a real property. Keep it on localhost. If it needs to be reachable by others, put auth in front of it first.
-- **`logs/` is sensitive.** It contains signed access headers and full request/response bodies including guest data. It's gitignored; treat the files the same way.
+- **The only auth is one shared token.** See [Access token](#access-token) for what that
+  does and doesn't buy you. Anyone holding it can call the upstream API with your
+  credentials, and `/api/complain/register` writes real records into a real property.
+- **`logs/` is sensitive.** It contains signed access headers and full request/response
+  bodies including guest data. It's gitignored; treat the files the same way.
 - `.env` and `data/` are gitignored too. Only `.env.template` is tracked.

@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: knowcross-unifocus-wrapper
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # All secrets are sync:false — set them in the Render dashboard, never here.
+      - key: BASE_URL
+        sync: false
+      - key: PROPERTY_ID
+        sync: false
+      - key: PUBLIC_KEY
+        sync: false
+      - key: PRIVATE_KEY
+        sync: false
+      # Omit ACCESS_TOKEN and the site is wide open. Generate one and set it.
+      - key: ACCESS_TOKEN
+        sync: false

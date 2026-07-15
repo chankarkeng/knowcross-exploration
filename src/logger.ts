@@ -11,6 +11,11 @@ function ensureDir(): Promise<void> {
   return dirReady;
 }
 
+/** Strip the access token out of a URL before it reaches stdout or logs/. */
+export function redactToken(url: string): string {
+  return url.replace(/([?&]token=)[^&]*/gi, "$1<redacted>");
+}
+
 export type LogDirection =
   | "inbound-request"
   | "inbound-response"
