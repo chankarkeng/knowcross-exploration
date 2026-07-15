@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Service Requests · Unifocus Wrapper</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #161a22;
+      --border: #2a2f3a;
+      --text: #e8eaf0;
+      --muted: #8b94a7;
+      --accent: #4f8cff;
+      --accent-soft: #1c2a47;
+      --row-alt: #1a1f2a;
+      --ok: #2d5b3e;
+      --ok-fg: #b9f0c8;
+      --warn: #5b482d;
+      --warn-fg: #ffd9a1;
+      --err: #5b2d2d;
+      --err-fg: #ffb1b1;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+    header { padding: 14px 24px; border-bottom: 1px solid var(--border); background: var(--panel); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+    header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+    nav.top a { color: var(--muted); text-decoration: none; margin-left: 18px; padding: 6px 10px; border-radius: 6px; }
+    nav.top a:hover { color: var(--text); background: var(--accent-soft); }
+    nav.top a.active { color: var(--accent); background: var(--accent-soft); }
+    main { padding: 18px 24px 40px; max-width: 1200px; margin: 0 auto; }
+
+    .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 24px; }
+    .flow .step { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; position: relative; }
+    .flow .step.active { border-color: var(--accent); }
+    .flow .step.done { border-color: var(--ok); }
+    .flow .step .num { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 12px; margin-right: 8px; }
+    .flow .step.done .num { background: var(--ok); color: var(--ok-fg); }
+    .flow .step .label { font-weight: 600; font-size: 13px; }
+    .flow .step .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+    /* min-width:0 so a wide table scrolls inside the card instead of stretching the grid. */
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; min-width: 0; }
+    .card h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; color: var(--text); }
+    .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .field label { font-size: 12px; color: var(--muted); }
+    .field select, .field input, .field textarea {
+      background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 6px; font: inherit;
+    }
+    .field select:disabled { opacity: 0.5; }
+    .row { display: flex; gap: 10px; }
+    .row > * { flex: 1; }
+    .priority { display: flex; gap: 6px; }
+    .priority label {
+      flex: 1; text-align: center; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+      background: var(--bg); cursor: pointer; font-size: 12px; color: var(--muted);
+    }
+    .priority input { display: none; }
+    .priority input:checked + span { color: var(--text); }
+    .priority label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+    .toggle { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+    .toggle input { width: 16px; height: 16px; }
+    button.primary { background: var(--accent); color: white; border: 0; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.secondary { background: var(--accent-soft); color: var(--accent); border: 0; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: 500; }
+
+    .toast { position: fixed; right: 20px; bottom: 20px; padding: 10px 14px; border-radius: 6px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 360px; }
+    .toast.show { opacity: 1; }
+    .toast.ok { background: var(--ok); color: var(--ok-fg); }
+    .toast.err { background: var(--err); color: var(--err-fg); }
+
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px 10px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; background: #1d222c; position: sticky; top: 0; }
+    tbody tr:nth-child(odd) { background: var(--row-alt); }
+    tbody tr:hover { background: #232a38; }
+
+    #list-wrap { overflow-x: auto; }
+
+    .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .pill-OPN { background: var(--warn); color: var(--warn-fg); }
+    .pill-CLS { background: var(--ok); color: var(--ok-fg); }
+    .pill-PRK { background: var(--accent-soft); color: var(--accent); }
+    .pill-USN, .pill-SNL { background: #2a2f3a; color: var(--muted); }
+    .pill-priority { background: var(--accent-soft); color: var(--accent); }
+
+    dialog { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 16px; max-width: 560px; }
+    dialog::backdrop { background: rgba(0,0,0,.6); }
+    dialog h3 { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+    dialog pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin: 0 0 12px; white-space: pre-wrap; word-break: break-word; max-height: 50vh; overflow: auto; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    button.link { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 11px; padding: 0; text-decoration: underline; }
+
+    .empty { color: var(--muted); padding: 24px; text-align: center; font-style: italic; }
+    .meta { color: var(--muted); font-size: 12px; }
+    pre.curl {
+      background: #0a0c10; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+      color: var(--muted); white-space: pre-wrap; word-break: break-all; margin: 12px 0 0;
+    }
+    pre.curl b { color: var(--text); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Service Request Flow</h1>
+    <nav class="top">
+      <a href="/config">Master Config</a>
+      <a href="/service-requests" class="active">Service Requests</a>
+      <a href="/docs">Swagger</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="flow" id="flow">
+      <div class="step" data-step="1"><span class="num">1</span><span class="label">Pick Room</span><div class="hint">Locations where LocationTypeCode = "R"</div></div>
+      <div class="step" data-step="2"><span class="num">2</span><span class="label">Pick Category</span><div class="hint">From CallCategories</div></div>
+      <div class="step" data-step="3"><span class="num">3</span><span class="label">Pick Description</span><div class="hint">Filtered by chosen category</div></div>
+      <div class="step" data-step="4"><span class="num">4</span><span class="label">Set details</span><div class="hint">Priority · IsGuestCall · Remarks · add more to the batch</div></div>
+      <div class="step" data-step="5"><span class="num">5</span><span class="label">Submit &amp; review</span><div class="hint">POST /api/complain/register (one array), then search by Location</div></div>
+    </div>
+
+    <div class="grid">
+      <section class="card">
+        <h2>Create Service Request</h2>
+        <div id="bootstrap-warning" style="display:none" class="empty">
+          Master config not loaded yet.
+          <button class="secondary" id="bootstrap-fetch">Fetch master config</button>
+        </div>
+
+        <div id="form-body" style="display:none">
+          <div class="field">
+            <label for="room">Room (LocationTypeCode = R)</label>
+            <input list="room-options" id="room" placeholder="Type to search room…" />
+            <datalist id="room-options"></datalist>
+            <div class="meta" id="room-meta">No room selected.</div>
+          </div>
+
+          <div class="row">
+            <div class="field">
+              <label for="category">Category</label>
+              <select id="category"><option value="">— select —</option></select>
+            </div>
+            <div class="field">
+              <label for="description">Description</label>
+              <select id="description" disabled><option value="">— select category first —</option></select>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="field">
+              <label>Priority</label>
+              <div class="priority" id="priority">
+                <label><input type="radio" name="priority" value="1" checked /><span>Normal</span></label>
+                <label><input type="radio" name="priority" value="2" /><span>Urgent</span></label>
+                <label><input type="radio" name="priority" value="3" /><span>Extra Urgent</span></label>
+                <label><input type="radio" name="priority" value="4" /><span>Crisis</span></label>
+              </div>
+            </div>
+            <div class="field">
+              <label>Guest call?</label>
+              <label class="toggle"><input type="checkbox" id="is-guest" /> <span>Registered on behalf of the guest</span></label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="remarks">Remarks (max 1000, no special chars)</label>
+            <textarea id="remarks" rows="3" placeholder="Optional notes — letters/numbers/spaces only"></textarea>
+          </div>
+
+          <div style="display:flex; gap:10px; align-items:center;">
+            <button class="secondary" id="add-batch" disabled>Add to batch</button>
+            <button class="primary" id="submit" disabled>Submit Service Request</button>
+            <span class="meta" id="submit-hint">Pick a room, category and description to enable.</span>
+          </div>
+
+          <div id="batch-wrap" style="margin-top:12px"></div>
+
+          <pre class="curl" id="preview"></pre>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Service Requests for selected Room</h2>
+        <div class="row" style="margin-bottom: 12px;">
+          <div class="field">
+            <label>Status filter</label>
+            <select id="status-filter">
+              <option value="">All</option>
+              <option value="OPN" selected>OPN — Open</option>
+              <option value="CLS">CLS — Closed</option>
+              <option value="PRK">PRK — Parked</option>
+              <option value="USN">USN — Unassigned</option>
+              <option value="SNL">SNL — Staff not logged in</option>
+            </select>
+          </div>
+          <div class="field" style="justify-content:flex-end;">
+            <button class="secondary" id="refresh-list" disabled>Refresh list</button>
+          </div>
+        </div>
+        <div id="list-meta" class="meta" style="margin-bottom: 8px;">Select a room to load its service requests.</div>
+        <div id="list-wrap"><div class="empty">No room selected.</div></div>
+      </section>
+    </div>
+  </main>
+
+  <dialog id="remarks-dialog">
+    <h3 id="remarks-dialog-title">Remarks</h3>
+    <pre id="remarks-dialog-body"></pre>
+    <form method="dialog"><button class="secondary">Close</button></form>
+  </dialog>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const PRIORITY_LABELS = { 1: "Normal", 2: "Urgent", 3: "Extra Urgent", 4: "Crisis" };
+    const state = {
+      rooms: [],
+      roomsById: new Map(),
+      categories: [],
+      descriptions: [],
+      propertyId: null,
+      selectedRoom: null,
+      selectedCategoryId: null,
+      selectedDescriptionId: null,
+      batch: [],
+      rows: [],
+    };
+
+    async function bootstrap() {
+      try {
+        const r = await fetch("/config.json", { cache: "no-store" });
+        if (!r.ok) throw new Error("missing");
+        const payload = await r.json();
+        const rec = (payload.data || [])[0] || {};
+        state.propertyId = rec.PropertyID;
+        state.rooms = (rec.Location || []).filter((l) => l.LocationTypeCode === "R");
+        state.roomsById = new Map(state.rooms.map((r) => [String(r.Id), r]));
+        state.categories = rec.CallCategories || [];
+        state.descriptions = rec.CallDescriptions || [];
+        renderForm();
+      } catch {
+        document.getElementById("bootstrap-warning").style.display = "block";
+        document.getElementById("form-body").style.display = "none";
+      }
+    }
+
+    function renderForm() {
+      document.getElementById("bootstrap-warning").style.display = "none";
+      document.getElementById("form-body").style.display = "block";
+
+      const datalist = document.getElementById("room-options");
+      datalist.innerHTML = "";
+      for (const r of state.rooms) {
+        const opt = document.createElement("option");
+        opt.value = `${r.Description} · #${r.Id}`;
+        opt.dataset.id = r.Id;
+        datalist.appendChild(opt);
+      }
+
+      const catSel = document.getElementById("category");
+      catSel.innerHTML = '<option value="">— select —</option>';
+      for (const c of state.categories) {
+        const opt = document.createElement("option");
+        opt.value = c.Id;
+        opt.textContent = `${c.Description} · #${c.Id}`;
+        catSel.appendChild(opt);
+      }
+
+      hookEvents();
+      updateFlow();
+      updatePreview();
+    }
+
+    function hookEvents() {
+      const roomInput = document.getElementById("room");
+      roomInput.addEventListener("input", () => {
+        const match = roomInput.value.match(/#(\d+)/);
+        const id = match ? match[1] : null;
+        const room = id ? state.roomsById.get(id) : null;
+        state.selectedRoom = room;
+        const meta = document.getElementById("room-meta");
+        meta.textContent = room ? `LocationId ${room.Id} · ${room.Description}` : "No room selected.";
+        document.getElementById("refresh-list").disabled = !room;
+        if (room) loadList();
+        else clearList("Select a room to load its service requests.");
+        updateFlow();
+        updatePreview();
+        updateSubmit();
+      });
+
+      document.getElementById("category").addEventListener("change", (e) => {
+        state.selectedCategoryId = Number(e.target.value) || null;
+        const descSel = document.getElementById("description");
+        if (state.selectedCategoryId) {
+          const filtered = state.descriptions.filter((d) => d.CategoryId === state.selectedCategoryId && !d.IsDel);
+          descSel.innerHTML = '<option value="">— select —</option>' +
+            filtered.map((d) => `<option value="${d.Id}">${escape(d.Description)} · #${d.Id}</option>`).join("");
+          descSel.disabled = filtered.length === 0;
+        } else {
+          descSel.innerHTML = '<option value="">— select category first —</option>';
+          descSel.disabled = true;
+        }
+        state.selectedDescriptionId = null;
+        updateFlow();
+        updatePreview();
+        updateSubmit();
+      });
+
+      document.getElementById("description").addEventListener("change", (e) => {
+        state.selectedDescriptionId = Number(e.target.value) || null;
+        updateFlow();
+        updatePreview();
+        updateSubmit();
+      });
+
+      document.querySelectorAll('input[name="priority"]').forEach((el) =>
+        el.addEventListener("change", () => { updatePreview(); }),
+      );
+      document.getElementById("is-guest").addEventListener("change", updatePreview);
+      document.getElementById("remarks").addEventListener("input", updatePreview);
+
+      document.getElementById("add-batch").addEventListener("click", () => {
+        state.batch.push(buildItem());
+        // Keep room/category so a run of similar requests is quick to queue.
+        state.selectedDescriptionId = null;
+        document.getElementById("description").value = "";
+        document.getElementById("remarks").value = "";
+        renderBatch();
+        updateFlow();
+        updatePreview();
+        updateSubmit();
+      });
+
+      document.getElementById("submit").addEventListener("click", submit);
+      document.getElementById("refresh-list").addEventListener("click", loadList);
+      // Delegated: the table is re-rendered on every load.
+      document.getElementById("list-wrap").addEventListener("click", (e) => {
+        const idx = e.target.dataset?.remarks;
+        if (idx !== undefined) showRemarks(state.rows[Number(idx)]);
+      });
+      document.getElementById("status-filter").addEventListener("change", loadList);
+      document.getElementById("bootstrap-fetch").addEventListener("click", async () => {
+        const r = await fetch("/api/master");
+        if (r.ok) bootstrap();
+        else toast("Failed to fetch master config", "err");
+      });
+    }
+
+    function updateFlow() {
+      const queued = state.batch.length > 0;
+      const stepStates = [
+        queued || !!state.selectedRoom,
+        queued || !!state.selectedCategoryId,
+        queued || !!state.selectedDescriptionId,
+        queued || !!state.selectedDescriptionId,
+        false,
+      ];
+      const firstIncomplete = stepStates.findIndex((d) => !d);
+      document.querySelectorAll(".flow .step").forEach((el, idx) => {
+        el.classList.toggle("done", stepStates[idx]);
+        el.classList.toggle("active", idx === firstIncomplete);
+      });
+    }
+
+    function updateSubmit() {
+      const count = buildBody().length;
+      document.getElementById("add-batch").disabled = !formIsValid();
+      document.getElementById("submit").disabled = count === 0;
+      const btn = document.getElementById("submit");
+      btn.textContent = count > 1 ? `Submit ${count} Service Requests` : "Submit Service Request";
+      document.getElementById("submit-hint").textContent = count
+        ? "Ready."
+        : "Pick a room, category and description to enable.";
+    }
+
+    function formIsValid() {
+      return !!(state.selectedRoom && state.selectedCategoryId && state.selectedDescriptionId);
+    }
+
+    function buildItem() {
+      return {
+        PropertyId: state.propertyId,
+        LocationId: state.selectedRoom?.Id ?? 0,
+        CategoryId: state.selectedCategoryId ?? 0,
+        CallDescriptionsId: state.selectedDescriptionId ?? 0,
+        Priority: Number(document.querySelector('input[name="priority"]:checked').value),
+        IsGuestCall: document.getElementById("is-guest").checked,
+        Remarks: document.getElementById("remarks").value,
+        Operation: 1,
+        CurrentStatus: "OPN",
+      };
+    }
+
+    // The API takes an array, so a batch is just the queued items plus whatever
+    // the form currently holds (if it's complete).
+    function buildBody() {
+      return formIsValid() ? [...state.batch, buildItem()] : [...state.batch];
+    }
+
+    function renderBatch() {
+      const wrap = document.getElementById("batch-wrap");
+      if (state.batch.length === 0) { wrap.innerHTML = ""; return; }
+      const rows = state.batch.map((it, i) => `<tr>
+        <td>${i + 1}</td>
+        <td>${escape(state.roomsById.get(String(it.LocationId))?.Description ?? it.LocationId)}</td>
+        <td>${escape(descLabel(it.CallDescriptionsId))}</td>
+        <td><span class="pill pill-priority">${PRIORITY_LABELS[it.Priority] ?? it.Priority}</span></td>
+        <td>${it.IsGuestCall ? "Guest" : "—"}</td>
+        <td><button class="secondary" data-remove="${i}">Remove</button></td>
+      </tr>`).join("");
+      wrap.innerHTML = `<div class="meta" style="margin-bottom:6px">${state.batch.length} queued (submits as one array).</div>
+        <table><tbody>${rows}</tbody></table>`;
+      wrap.querySelectorAll("[data-remove]").forEach((b) =>
+        b.addEventListener("click", () => {
+          state.batch.splice(Number(b.dataset.remove), 1);
+          renderBatch();
+          updatePreview();
+          updateSubmit();
+        }),
+      );
+    }
+
+    function descLabel(id) {
+      return state.descriptions.find((d) => d.Id === id)?.Description ?? `#${id}`;
+    }
+
+    function updatePreview() {
+      const body = buildBody();
+      const pretty = JSON.stringify(body, null, 2);
+      document.getElementById("preview").innerHTML =
+        '<b>POST</b> /api/complain/register\n' + escape(pretty);
+    }
+
+    async function submit() {
+      const btn = document.getElementById("submit");
+      btn.disabled = true;
+      btn.textContent = "Submitting…";
+      try {
+        const r = await fetch("/api/complain/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildBody()),
+        });
+        const data = await r.json();
+        if (!r.ok || data.HasError) {
+          throw new Error(data?.Errors?.[0]?.ErrorMessage || `HTTP ${r.status}`);
+        }
+        const created = data.Result || [];
+        toast(
+          created.length ? `Created ComplainId ${created.map((c) => c.ComplainId).join(", ")}` : "Created",
+          "ok",
+        );
+        state.batch = [];
+        renderBatch();
+        loadList();
+      } catch (err) {
+        toast("Create failed: " + err.message, "err");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Submit Service Request";
+        updateSubmit();
+      }
+    }
+
+    async function loadList() {
+      if (!state.selectedRoom) return;
+      const status = document.getElementById("status-filter").value;
+      const body = {
+        Properties: [state.propertyId],
+        Locations: [state.selectedRoom.Id],
+        PageNumber: 0,
+        PageSize: 25,
+      };
+      if (status) body.StatusCode = status;
+      const wrap = document.getElementById("list-wrap");
+      const meta = document.getElementById("list-meta");
+      meta.textContent = "Loading…";
+      try {
+        const r = await fetch("/api/complain/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await r.json();
+        if (data.HasError) throw new Error(data?.Errors?.[0]?.ErrorMessage || "search error");
+        const results = data.Result || [];
+        state.rows = results;
+        meta.textContent = `${results.length} of ${data.TotalRecords ?? results.length} requests for LocationId ${state.selectedRoom.Id}.`;
+        if (results.length === 0) {
+          wrap.innerHTML = '<div class="empty">No service requests for this room.</div>';
+          return;
+        }
+        wrap.innerHTML = renderTable(results);
+      } catch (err) {
+        meta.textContent = "Error: " + err.message;
+        wrap.innerHTML = "";
+      }
+    }
+
+    function clearList(msg) {
+      document.getElementById("list-meta").textContent = msg;
+      document.getElementById("list-wrap").innerHTML = `<div class="empty">${escape(msg)}</div>`;
+    }
+
+    const REMARKS_CLIP = 70;
+
+    function renderRemarks(text, rowIdx) {
+      if (!text) return "—";
+      if (text.length <= REMARKS_CLIP) return escape(text);
+      return `${escape(text.slice(0, REMARKS_CLIP))}…
+        <div class="meta">${text.length} chars ·
+          <button class="link" data-remarks="${rowIdx}">show full</button>
+        </div>`;
+    }
+
+    function renderTable(rows) {
+      const head = ["#", "Status", "Priority", "Description", "Registered", "Last Update", "Last Remarks"];
+      const body = rows.map((r, i) => `<tr>
+        <td><code>${r.DisplayCallNo ?? r.ComplainId}</code></td>
+        <td><span class="pill pill-${r.CurrentStatus}">${r.CurrentStatus}</span></td>
+        <td><span class="pill pill-priority">${PRIORITY_LABELS[r.Priority] ?? r.Priority}</span></td>
+        <td>${escape(r.CallDescription ?? "—")}</td>
+        <td>${fmt(r.RegisteredAt)}</td>
+        <td>${fmt(r.LastUpdate)}</td>
+        <td>${renderRemarks(r.LastRemarks, i)}</td>
+      </tr>`).join("");
+      return `<table><thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`;
+    }
+
+    function showRemarks(row) {
+      document.getElementById("remarks-dialog-title").textContent =
+        `Remarks · #${row.DisplayCallNo ?? row.ComplainId} · ${row.LastRemarks.length} chars`;
+      document.getElementById("remarks-dialog-body").textContent = row.LastRemarks;
+      document.getElementById("remarks-dialog").showModal();
+    }
+
+    function fmt(iso) {
+      if (!iso) return "—";
+      try { return new Date(iso).toLocaleString(); } catch { return iso; }
+    }
+
+    function toast(msg, kind) {
+      const el = document.getElementById("toast");
+      el.className = `toast show ${kind}`;
+      el.textContent = msg;
+      setTimeout(() => el.classList.remove("show"), 3500);
+    }
+
+    function escape(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    bootstrap();
+  </script>
+</body>
+</html>

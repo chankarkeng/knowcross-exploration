@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Unifocus Property Config</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #161a22;
+      --border: #2a2f3a;
+      --text: #e8eaf0;
+      --muted: #8b94a7;
+      --accent: #4f8cff;
+      --accent-soft: #1c2a47;
+      --row-alt: #1a1f2a;
+      --pill-room: #2d5b3e;
+      --pill-public: #5b482d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    h1 { margin: 0; font-size: 18px; font-weight: 600; }
+    .meta { color: var(--muted); font-size: 12px; display: flex; gap: 18px; flex-wrap: wrap; }
+    .meta b { color: var(--text); font-weight: 600; }
+    button.refresh {
+      background: var(--accent);
+      color: white;
+      border: 0;
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    button.refresh:hover { filter: brightness(1.1); }
+    button.refresh:disabled { opacity: 0.5; cursor: wait; }
+    nav.tabs {
+      padding: 0 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+      display: flex;
+      gap: 4px;
+    }
+    nav.tabs button {
+      background: transparent;
+      color: var(--muted);
+      border: 0;
+      border-bottom: 2px solid transparent;
+      padding: 12px 16px;
+      cursor: pointer;
+      font: inherit;
+    }
+    nav.tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+    nav.tabs button .count {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 7px;
+      border-radius: 10px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 11px;
+    }
+    main { padding: 18px 24px 40px; }
+    section { display: none; }
+    section.active { display: block; }
+    .toolbar { margin-bottom: 12px; display: flex; gap: 8px; align-items: center; }
+    .toolbar input {
+      flex: 1;
+      max-width: 360px;
+      padding: 8px 10px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font: inherit;
+    }
+    .toolbar .hint { color: var(--muted); font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
+    th { background: #1d222c; font-weight: 600; color: var(--muted); position: sticky; top: 0; }
+    tbody tr:nth-child(odd) { background: var(--row-alt); }
+    tbody tr:hover { background: #232a38; }
+    .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .pill-R { background: var(--pill-room); color: #b9f0c8; }
+    .pill-M { background: var(--pill-public); color: #ffd9a1; }
+    .pill-priority { background: var(--accent-soft); color: var(--accent); }
+    .empty { color: var(--muted); padding: 24px; text-align: center; font-style: italic; }
+    code.id { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Unifocus Property Config</h1>
+      <div class="meta" id="meta">Loading…</div>
+    </div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <nav class="top" style="display:flex; gap:6px;">
+        <a href="/config" style="color:var(--accent); text-decoration:none; padding:6px 10px; border-radius:6px; background:var(--accent-soft);">Master Config</a>
+        <a href="/service-requests" style="color:var(--muted); text-decoration:none; padding:6px 10px; border-radius:6px;">Service Requests</a>
+        <a href="/docs" style="color:var(--muted); text-decoration:none; padding:6px 10px; border-radius:6px;">Swagger</a>
+      </nav>
+      <button class="refresh" id="refresh">Refresh from Unifocus</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs"></nav>
+  <main id="panels"></main>
+
+  <script>
+    const TABS = [
+      { id: "locations", label: "Locations", field: "Location" },
+      { id: "categories", label: "Call Categories", field: "CallCategories" },
+      { id: "descriptions", label: "Call Descriptions", field: "CallDescriptions" },
+      { id: "complaintypes", label: "Complain Types", field: "ComplainTypes" },
+    ];
+
+    async function load() {
+      try {
+        const r = await fetch("/config.json", { cache: "no-store" });
+        if (!r.ok) {
+          throw new Error("No config.json yet. Hit GET /api/master first.");
+        }
+        const payload = await r.json();
+        render(payload);
+      } catch (err) {
+        document.getElementById("meta").textContent = err.message;
+        document.getElementById("tabs").innerHTML = "";
+        document.getElementById("panels").innerHTML =
+          '<div class="empty">No data. Click "Refresh from Unifocus" to fetch.</div>';
+      }
+    }
+
+    function render(payload) {
+      const fetchedAt = payload.fetchedAt;
+      const records = Array.isArray(payload.data) ? payload.data : [];
+      const first = records[0] || {};
+      const meta = document.getElementById("meta");
+      meta.innerHTML = "";
+      meta.append(
+        kv("Property", first.PropertyID ?? "—"),
+        kv("Key", first.Key ?? "—"),
+        kv("Language", first.LanguageCode ?? "—"),
+        kv("Upstream last update", first.LastUpdate ?? "—"),
+        kv("Fetched at", fetchedAt ?? "—"),
+      );
+
+      const tabsEl = document.getElementById("tabs");
+      const panelsEl = document.getElementById("panels");
+      tabsEl.innerHTML = "";
+      panelsEl.innerHTML = "";
+
+      const categoriesById = new Map((first.CallCategories ?? []).map((c) => [c.Id, c.Description]));
+      const complainTypesById = new Map((first.ComplainTypes ?? []).map((t) => [t.Id, t.Name]));
+
+      for (const tab of TABS) {
+        const rows = first[tab.field] ?? [];
+        const btn = document.createElement("button");
+        btn.dataset.tab = tab.id;
+        btn.innerHTML = `${tab.label} <span class="count">${rows.length}</span>`;
+        btn.addEventListener("click", () => activate(tab.id));
+        tabsEl.appendChild(btn);
+
+        const section = document.createElement("section");
+        section.id = `panel-${tab.id}`;
+        section.appendChild(buildPanel(tab, rows, { categoriesById, complainTypesById }));
+        panelsEl.appendChild(section);
+      }
+
+      activate(TABS[0].id);
+    }
+
+    function buildPanel(tab, rows, lookups) {
+      const wrap = document.createDocumentFragment();
+      const toolbar = document.createElement("div");
+      toolbar.className = "toolbar";
+      const input = document.createElement("input");
+      input.placeholder = `Filter ${rows.length} ${tab.label.toLowerCase()}…`;
+      const hint = document.createElement("span");
+      hint.className = "hint";
+      toolbar.append(input, hint);
+      wrap.appendChild(toolbar);
+
+      if (rows.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = `No ${tab.label.toLowerCase()} in payload.`;
+        wrap.appendChild(empty);
+        return wrap;
+      }
+
+      const table = document.createElement("table");
+      const thead = document.createElement("thead");
+      const tbody = document.createElement("tbody");
+      table.append(thead, tbody);
+
+      const renderRows = (filter) => {
+        const f = filter.trim().toLowerCase();
+        tbody.innerHTML = "";
+        let shown = 0;
+        for (const row of rows) {
+          const cells = formatRow(tab.id, row, lookups);
+          if (f && !cells.some((c) => String(c.search ?? c.html).toLowerCase().includes(f))) continue;
+          shown++;
+          const tr = document.createElement("tr");
+          for (const c of cells) {
+            const td = document.createElement("td");
+            td.innerHTML = c.html;
+            tr.appendChild(td);
+          }
+          tbody.appendChild(tr);
+        }
+        hint.textContent = `${shown} of ${rows.length}`;
+      };
+
+      const headers = headerCells(tab.id);
+      thead.innerHTML =
+        "<tr>" + headers.map((h) => `<th>${h}</th>`).join("") + "</tr>";
+
+      input.addEventListener("input", () => renderRows(input.value));
+      renderRows("");
+      wrap.appendChild(table);
+      return wrap;
+    }
+
+    function headerCells(tabId) {
+      switch (tabId) {
+        case "locations": return ["Id", "Description", "Type"];
+        case "categories": return ["Id", "Description"];
+        case "descriptions": return ["Id", "Description", "Category", "Priority", "Complain Type", "Deleted"];
+        case "complaintypes": return ["Id", "Name"];
+      }
+      return [];
+    }
+
+    function formatRow(tabId, row, { categoriesById, complainTypesById }) {
+      const id = (v) => ({ html: `<code class="id">${v ?? "—"}</code>`, search: v ?? "" });
+      const text = (v) => ({ html: escape(v ?? "—"), search: v ?? "" });
+      switch (tabId) {
+        case "locations":
+          return [
+            id(row.Id),
+            text(row.Description),
+            {
+              html: `<span class="pill pill-${row.LocationTypeCode}">${row.LocationTypeCode === "R" ? "Room" : "Public"}</span>`,
+              search: row.LocationTypeCode === "R" ? "room" : "public",
+            },
+          ];
+        case "categories":
+          return [id(row.Id), text(row.Description)];
+        case "descriptions":
+          return [
+            id(row.Id),
+            text(row.Description),
+            text(categoriesById.get(row.CategoryId) ?? `#${row.CategoryId}`),
+            { html: `<span class="pill pill-priority">${priorityLabel(row.Priority)}</span>`, search: priorityLabel(row.Priority) },
+            text(complainTypesById.get(row.ComplainType) ?? `#${row.ComplainType}`),
+            text(row.IsDel ? "Yes" : "No"),
+          ];
+        case "complaintypes":
+          return [id(row.Id), text(row.Name)];
+      }
+      return [];
+    }
+
+    function priorityLabel(p) {
+      return { 1: "Normal", 2: "Urgent", 3: "Extra Urgent", 4: "Crisis" }[p] ?? `#${p}`;
+    }
+
+    function escape(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function kv(label, value) {
+      const span = document.createElement("span");
+      span.innerHTML = `${escape(label)}: <b>${escape(String(value))}</b>`;
+      return span;
+    }
+
+    function activate(id) {
+      for (const btn of document.querySelectorAll("nav.tabs button")) {
+        btn.classList.toggle("active", btn.dataset.tab === id);
+      }
+      for (const sec of document.querySelectorAll("main section")) {
+        sec.classList.toggle("active", sec.id === `panel-${id}`);
+      }
+    }
+
+    document.getElementById("refresh").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = "Fetching…";
+      try {
+        const r = await fetch("/api/master");
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        await load();
+      } catch (err) {
+        alert("Refresh failed: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Refresh from Unifocus";
+      }
+    });
+
+    load();
+  </script>
+</body>
+</html>
