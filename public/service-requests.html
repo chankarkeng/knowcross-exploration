@@ -436,9 +436,26 @@
     function renderAttachMeta() {
       const el = document.getElementById("attach-meta");
       if (!state.attachments.length) { el.textContent = "No files attached."; return; }
-      const kb = state.attachments.reduce((n, a) => n + a.Base64String.length, 0) / 1024;
-      el.textContent = `${state.attachments.length} file(s) · ${kb.toFixed(0)} Kb encoded · ` +
-        state.attachments.map((a) => a.FileName).join(", ");
+      const kb = (n) => (n / 1024).toFixed(0);
+      const total = state.attachments.reduce((n, a) => n + a.Base64String.length, 0);
+      const rows = state.attachments.map((a, i) => `<tr>
+        <td>${escape(a.FileName)}</td>
+        <td>${kb(a.Base64String.length)} Kb</td>
+        <td><button class="secondary" data-remove-attach="${i}">Remove</button></td>
+      </tr>`).join("");
+      el.innerHTML = `<div style="margin-bottom:6px">${state.attachments.length} file(s) · ${kb(total)} Kb encoded.</div>
+        <table><tbody>${rows}</tbody></table>`;
+      el.querySelectorAll("[data-remove-attach]").forEach((b) =>
+        b.addEventListener("click", () => {
+          state.attachments.splice(Number(b.dataset.removeAttach), 1);
+          // The native input still holds every file it was given and can't be
+          // partially edited — clear it so its "N files" label can't contradict
+          // this list. Re-picking replaces the set, which it already did.
+          document.getElementById("attachments").value = "";
+          renderAttachMeta();
+          updatePreview();
+        }),
+      );
     }
 
     function clearAttachments() {
