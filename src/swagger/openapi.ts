@@ -69,6 +69,29 @@ export const openapiDocument = {
                     CurrentStatus: "OPN",
                   },
                 },
+                withAttachment: {
+                  summary: "Single request with a Base64 attachment (10Mb max per request)",
+                  value: {
+                    PropertyId: Number(config.PROPERTY_ID),
+                    LocationId: 0,
+                    CategoryId: 0,
+                    CallDescriptionsId: 0,
+                    Priority: 1,
+                    IsGuestCall: false,
+                    Remarks: "Test from wrapper with attachment",
+                    Attachments: [
+                      {
+                        FileName: "sample.png",
+                        // 1x1 transparent PNG
+                        Base64String:
+                          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+                        ApplicationId: 0,
+                      },
+                    ],
+                    Operation: 1,
+                    CurrentStatus: "OPN",
+                  },
+                },
               },
             },
           },

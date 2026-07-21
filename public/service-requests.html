@@ -169,6 +169,12 @@
             <textarea id="remarks" rows="3" placeholder="Optional notes — letters/numbers/spaces only"></textarea>
           </div>
 
+          <div class="field">
+            <label for="attachments">Attachments (optional, 10Mb total per request)</label>
+            <input type="file" id="attachments" multiple />
+            <div class="meta" id="attach-meta">No files attached.</div>
+          </div>
+
           <div style="display:flex; gap:10px; align-items:center;">
             <button class="secondary" id="add-batch" disabled>Add to batch</button>
             <button class="primary" id="submit" disabled>Submit Service Request</button>
@@ -226,7 +232,12 @@
       selectedDescriptionId: null,
       batch: [],
       rows: [],
+      attachments: [],
     };
+
+    // Spec: max 10Mb of attachment per request. Measured on the Base64 payload,
+    // which is what actually goes over the wire (~33% bigger than the file).
+    const ATTACH_LIMIT = 10 * 1024 * 1024;
 
     async function bootstrap() {
       try {
@@ -321,12 +332,26 @@
       document.getElementById("is-guest").addEventListener("change", updatePreview);
       document.getElementById("remarks").addEventListener("input", updatePreview);
 
+      document.getElementById("attachments").addEventListener("change", async (e) => {
+        const files = [...e.target.files];
+        state.attachments = await Promise.all(files.map(toAttachment));
+        const bytes = state.attachments.reduce((n, a) => n + a.Base64String.length, 0);
+        if (bytes > ATTACH_LIMIT) {
+          state.attachments = [];
+          e.target.value = "";
+          toast(`Attachments are ${(bytes / 1048576).toFixed(1)}Mb encoded — limit is 10Mb.`, "err");
+        }
+        renderAttachMeta();
+        updatePreview();
+      });
+
       document.getElementById("add-batch").addEventListener("click", () => {
         state.batch.push(buildItem());
         // Keep room/category so a run of similar requests is quick to queue.
         state.selectedDescriptionId = null;
         document.getElementById("description").value = "";
         document.getElementById("remarks").value = "";
+        clearAttachments();
         renderBatch();
         updateFlow();
         updatePreview();
@@ -388,9 +413,38 @@
         Priority: Number(document.querySelector('input[name="priority"]:checked').value),
         IsGuestCall: document.getElementById("is-guest").checked,
         Remarks: document.getElementById("remarks").value,
+        ...(state.attachments.length ? { Attachments: state.attachments } : {}),
         Operation: 1,
         CurrentStatus: "OPN",
       };
+    }
+
+    function toAttachment(file) {
+      return new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        // readAsDataURL gives "data:<mime>;base64,<payload>" — the API wants the payload only.
+        fr.onload = () => resolve({
+          FileName: file.name,
+          Base64String: String(fr.result).split(",")[1],
+          ApplicationId: 0,
+        });
+        fr.onerror = () => reject(new Error(`Could not read ${file.name}`));
+        fr.readAsDataURL(file);
+      });
+    }
+
+    function renderAttachMeta() {
+      const el = document.getElementById("attach-meta");
+      if (!state.attachments.length) { el.textContent = "No files attached."; return; }
+      const kb = state.attachments.reduce((n, a) => n + a.Base64String.length, 0) / 1024;
+      el.textContent = `${state.attachments.length} file(s) · ${kb.toFixed(0)} Kb encoded · ` +
+        state.attachments.map((a) => a.FileName).join(", ");
+    }
+
+    function clearAttachments() {
+      state.attachments = [];
+      document.getElementById("attachments").value = "";
+      renderAttachMeta();
     }
 
     // The API takes an array, so a batch is just the queued items plus whatever
@@ -428,7 +482,9 @@
 
     function updatePreview() {
       const body = buildBody();
-      const pretty = JSON.stringify(body, null, 2);
+      // Base64 blobs would drown the preview — show their size instead of the payload.
+      const pretty = JSON.stringify(body, (k, v) =>
+        k === "Base64String" ? `<${(v.length / 1024).toFixed(0)} Kb base64>` : v, 2);
       document.getElementById("preview").innerHTML =
         '<b>POST</b> /api/complain/register\n' + escape(pretty);
     }
@@ -453,6 +509,7 @@
           "ok",
         );
         state.batch = [];
+        clearAttachments();
         renderBatch();
         loadList();
       } catch (err) {
